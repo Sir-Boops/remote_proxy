@@ -8,19 +8,34 @@ if ($_GET['proxyImg']) {
 
 		$headers = get_all_headers($URL);
 
-		if ($headers) {
+		if (!is_array($headers["Content-Type"])) {
 
 			if (strpos($headers["Content-Type"], 'image/') !== FALSE) {
 
 				header("Content-Type: " . $headers["Content-Type"]);
 				header("Content-Length: " . $headers["Content-Length"]);
+				if (isset($headers["Content-Encoding"])) {
+					header("Content-Encoding: " . $headers["Content-Encoding"]);
+				}
 				readfile($URL);
 			} else {
 				header("HTTP/1.1 403 Forbidden");
 			}
 
 		} else {
-			header("HTTP/1.1 403 Forbidden");
+
+			foreach ($headers["Content-Type"] as $cont) {
+
+				if (strpos($cont, "image/") !== FALSE) {
+
+					header("Content-Type: " . $cont);
+					header("Content-Length: " . $headers["Content-Length"]);
+					if (isset($headers["Content-Encoding"])) {
+						header("Content-Encoding: " . $headers["Content-Encoding"]);
+					}
+					readfile($URL);
+				}
+			}
 		}
 
 	} else {
@@ -29,6 +44,7 @@ if ($_GET['proxyImg']) {
 }
 
 function get_all_headers($URL) {
+
 	stream_context_set_default(
 		array(
 			'http' => array(
@@ -46,6 +62,10 @@ function get_all_headers($URL) {
 			)
 		)
 	);
+
+	if (!$headers) {
+		header("HTTP/1.1 403 Forbidden");
+	}
 
 	return $headers;
 }
