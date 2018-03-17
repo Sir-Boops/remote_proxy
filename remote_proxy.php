@@ -1,81 +1,54 @@
 <?php
 
-if ($_GET['proxyImg']) {
+class remote_proxy extends rcube_plugin {
 
-	$URL = $_GET['proxyImg'];
+	public $task = 'mail|login|logout';
+	private $map;
 
-	if (filter_var($URL, FILTER_VALIDATE_URL)) {
+	function init () {
+		// Load the client script for reqriting URLs
+		$this->include_script('remote_proxy.js');
 
-		$headers = get_all_headers($URL);
+		// Register hooks
+		$this->add_hook('login_after', array($this, 'login_after'));
+		$this->add_hook('logout_after', array($this, 'logout_after'));
+	}
 
-		if (!is_array($headers["Content-Type"])) {
+	function login_after () {
+		$config = include('config.inc.php');
 
-			if (strpos($headers["Content-Type"], 'image/') !== FALSE) {
+		$username = rcmail::get_instance()->user->data['username'];
+		$token = bin2hex(random_bytes(16));
 
-				header("Content-Type: " . $headers["Content-Type"]);
-				header("Content-Length: " . $headers["Content-Length"]);
-				if (isset($headers["Content-Encoding"])) {
-					header("Content-Encoding: " . $headers["Content-Encoding"]);
-				}
-				readfile($URL);
-			} else {
-				header("HTTP/1.1 403 Forbidden");
-			}
+		$dbc = new PDO($config['dbType'].":host=".$config['dbHost'].";dbname=".$config['dbName'],
+			$config['dbUser'], $config['dbPass']);
 
-		} else {
+		$stmt = $dbc->prepare("CREATE TABLE IF NOT EXISTS keys (username TEXT NOT NULL, key TEXT NOT NULL)");
+		$stmt->execute();
 
-			foreach ($headers["Content-Type"] as $cont) {
+		$stmt = $dbc->prepare("INSERT INTO keys (username, key) VALUES (:user, :token)");
+		$stmt->execute(array(":user" => $username, ":token" => $token));
 
-				if (strpos($cont, "image/") !== FALSE) {
+		$stmt = null;
+		$dbc = null;
 
-					header("Content-Type: " . $cont);
-					header("Content-Length: " . $headers["Content-Length"]);
-					if (isset($headers["Content-Encoding"])) {
-						header("Content-Encoding: " . $headers["Content-Encoding"]);
-					}
-					readfile($URL);
-				}
-			}
-		}
+		setcookie("proxy", $token, 0, "/", NULL, TRUE, TRUE);
+	}
 
-	} else {
-		header("HTTP/1.1 403 Forbidden");
+	function logout_after () {
+		$config = include('config.inc.php');
+
+		$key = $_COOKIE['proxy'];
+
+		$dbc = new PDO($config['dbType'].":host=".$config['dbHost'].";dbname=".$config['dbName'],
+			$config['dbUser'], $config['dbPass']);
+
+		$stmt = $dbc->prepare("DELETE FROM keys WHERE key LIKE :key");
+		$stmt->execute(array(":key" => $key));
+
+		$stmt = null;
+		$dbc = null;
 	}
 }
 
-function get_all_headers($URL) {
-
-	stream_context_set_default(
-		array(
-			'http' => array(
-				'method' => 'HEAD'
-			)
-		)
-	);
-
-	$headers = get_headers($URL, 1);
-
-	stream_context_set_default(
-		array(
-			'http' => array(
-				'method' => 'GET'
-			)
-		)
-	);
-
-	if (!$headers) {
-		header("HTTP/1.1 403 Forbidden");
-	}
-
-	return $headers;
-}
-
-if ( class_exists("rcube_plugin") ) {
-	class remote_proxy extends rcube_plugin {
-		public $task = 'mail';
-		private $map;
-		function init () {
-			$this->include_script('remote_proxy.js');
-		}
-	}
-}
+?>
