@@ -26,6 +26,12 @@ class remote_proxy extends rcube_plugin {
 		$stmt = $dbc->prepare("CREATE TABLE IF NOT EXISTS keys (username TEXT NOT NULL, key TEXT NOT NULL)");
 		$stmt->execute();
 
+		if (isset($_COOKIE['proxy'])) {
+			$key = $_COOKIE['proxy'];
+			$stmt = $dbc->prepare("DELETE FROM keys WHERE key LIKE :key");
+			$stmt->execute(array(":key" => $key));
+		}
+
 		$stmt = $dbc->prepare("INSERT INTO keys (username, key) VALUES (:user, :token)");
 		$stmt->execute(array(":user" => $username, ":token" => $token));
 
